@@ -1,0 +1,42 @@
+hash: 0c9eac69f2843fac18728059f38c7bbf3dd5b4084d12474094d1e05c078a36d5
+updated: 2018-06-12T07:31:42.269542+08:00
+imports:
+- name: github.com/go-redis/redis
+  version: 83fb42932f6145ce52df09860384a4653d2d332a
+  subpackages:
+  - internal
+  - internal/consistenthash
+  - internal/hashtag
+  - internal/pool
+  - internal/proto
+  - internal/singleflight
+  - internal/util
+- name: github.com/patrickmn/go-cache
+  version: a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0
+- name: github.com/sirupsen/logrus
+  version: c155da19408a8799da419ed3eeb0cb5db0ad5dbc
+- name: golang.org/x/crypto
+  version: c4a91bd4f524f10d064139674cf55852e055ad01
+  subpackages:
+  - ssh/terminal
+- name: golang.org/x/sys
+  version: 8c0ece68c28377f4c326d85b94f8df0dace46f80
+  subpackages:
+  - unix
+  - windows
+testImports:
+- name: github.com/davecgh/go-spew
+  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  subpackages:
+  - spew
+- name: github.com/pmezard/go-difflib
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
+  subpackages:
+  - difflib
+- name: github.com/stretchr/testify
+  version: f35b8ab0b5a2cef36673838d662e249dd9c94686
+  subpackages:
+  - assert
+- name: ti-ting.com/wangji/gosync
+  version: 90e67e9bb9af6c7be6e3ff52c4ece5893b576213
+  repo: http://git.ti-ding.com/wangji/gosync.git

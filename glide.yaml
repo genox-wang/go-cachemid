@@ -1,0 +1,16 @@
+package: gocachemid
+import:
+- package: github.com/go-redis/redis
+  version: ~6.12.0
+- package: github.com/sirupsen/logrus
+  version: ~1.0.5
+- package: github.com/patrickmn/go-cache
+  version: ~2.1.0
+testImport:
+- package: github.com/stretchr/testify
+  version: ~1.2.2
+  subpackages:
+  - assert
+- package: ti-ting.com/wangji/gosync
+  version: ~0.0.1
+  repo: http://git.ti-ding.com/wangji/gosync.git
