@@ -1,6 +1,7 @@
 package gocachemid
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -92,7 +93,8 @@ func (c *Cache) GetCacheLayerKey(layer int, fs ...string) string {
 		key += "_" + f
 	}
 	key += fmt.Sprintf("_%d", layer)
-	return key
+
+	return SHA256(key)
 }
 
 // GetLockKey 按维度格式化锁的键
@@ -102,7 +104,7 @@ func (c *Cache) GetLockKey(fs []string) string {
 		key += "_" + f
 	}
 	key += LockSuffix
-	return key
+	return SHA256(key)
 }
 
 // NewCache 创建缓存实例
@@ -134,4 +136,11 @@ func NewCache(client ClientBase, keyPrefix string, funcReadData func(...string) 
 	c.CacheClient.Connect()
 
 	return c
+}
+
+// SHA256  SHA256加密
+func SHA256(s string) string {
+	h := sha256.New()
+	h.Write([]byte(s))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
