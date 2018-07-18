@@ -32,6 +32,15 @@ func (c *ClientRedis) Del(key string) error {
 	return c.client.Del(key).Err()
 }
 
+// DelWithPrefix Redis 删除前缀为 keyPrefix 的缓存
+func (c *ClientRedis) DelWithPrefix(keyPrefix string) error {
+	keys, _ := c.client.Keys(keyPrefix).Result()
+	for _, k := range keys {
+		c.Del(k)
+	}
+	return nil
+}
+
 // Connect 连接 Redis 服务器
 func (c *ClientRedis) Connect() error {
 

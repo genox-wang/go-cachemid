@@ -2,6 +2,7 @@ package gocachemid
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/patrickmn/go-cache"
@@ -35,6 +36,17 @@ func (c *ClientGoCache) Get(key string) (string, error) {
 // Del GoCache 删除缓存数据
 func (c *ClientGoCache) Del(key string) error {
 	c.client.Delete(key)
+	return nil
+}
+
+// DelWithPrefix GoCache 删除前缀为 keyPrefix 的缓存
+func (c *ClientGoCache) DelWithPrefix(keyPrefix string) error {
+	items := c.client.Items()
+	for k := range items {
+		if strings.HasPrefix(k, keyPrefix) {
+			c.client.Delete(k)
+		}
+	}
 	return nil
 }
 

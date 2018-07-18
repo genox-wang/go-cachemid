@@ -8,5 +8,6 @@ type ClientBase interface {
 	Add(key string, val string, expireTime time.Duration) bool
 	Get(key string) (string, error)
 	Del(key string) error
+	DelWithPrefix(keyPrefix string) error
 	Connect() error
 }
