@@ -50,6 +50,11 @@ func (c *Cache) Del(fields ...string) error {
 	return c.CacheClient.Del(c.GetCacheLayerKey(1, fields...))
 }
 
+// DelWithPrefix 根据前缀删除缓存
+func (c *Cache) DelWithPrefix(keyPrefix string) error {
+	return c.CacheClient.DelWithPrefix(keyPrefix)
+}
+
 // SetCache2Enabled 开启或关闭2级缓存
 func (c *Cache) SetCache2Enabled(enabled bool) {
 	c.Cache2Enabled = enabled
@@ -89,22 +94,31 @@ func (c *Cache) Get(fields ...string) (string, error) {
 // GetCacheLayerKey 按层维度格式化的键
 func (c *Cache) GetCacheLayerKey(layer int, fs ...string) string {
 	key := c.KeyPrefix
-	for _, f := range fs {
-		key += "_" + f
-	}
-	key += fmt.Sprintf("_%d", layer)
 
-	return SHA256(key)
+	suffix := ""
+	for _, f := range fs {
+		suffix += "_" + f
+	}
+	suffix += fmt.Sprintf("_%d", layer)
+
+	suffix = SHA256(suffix)
+
+	return key + suffix
 }
 
 // GetLockKey 按维度格式化锁的键
 func (c *Cache) GetLockKey(fs []string) string {
 	key := c.KeyPrefix
+
+	suffix := ""
 	for _, f := range fs {
-		key += "_" + f
+		suffix += "_" + f
 	}
-	key += LockSuffix
-	return SHA256(key)
+	suffix += LockSuffix
+
+	suffix = SHA256(suffix)
+
+	return key + suffix
 }
 
 // NewCache 创建缓存实例
