@@ -29,7 +29,7 @@ type Cache struct {
 	KeyPrefix     string
 	ExpireTime    time.Duration
 	Cache2Enabled bool
-	FuncReadData  func(...string) string
+	FuncReadData  func(...string) (string, error)
 }
 
 // Lock 尝试获取指定键名的分布式锁
@@ -69,9 +69,19 @@ func (c *Cache) Get(fields ...string) (string, error) {
 	}
 
 	if c.Lock(c.GetLockKey(fields), LockExpire) {
-		newVal := ""
+		var (
+			newVal string
+			err    error
+		)
 		if c.FuncReadData != nil {
-			newVal = c.FuncReadData(fields...)
+			newVal, err = c.FuncReadData(fields...)
+			if err != nil {
+				cache2, err := c.CacheClient.Get(c.GetCacheLayerKey(2, fields...))
+				if err == nil {
+					return cache2, err
+				}
+				return "", err
+			}
 		}
 		c.CacheClient.Set(c.GetCacheLayerKey(1, fields...), newVal, c.ExpireTime)
 		if c.Cache2Enabled {
@@ -127,7 +137,7 @@ func (c *Cache) GetLockKey(fs []string) string {
 // funcReadData 按多维度读取数据的回调
 // expireTime 缓存过期时间 0 表示默认过期时间
 // cache2Enabled 是否开启2级缓存
-func NewCache(client ClientBase, keyPrefix string, funcReadData func(...string) string, expireTime time.Duration, cache2Enabled bool) *Cache {
+func NewCache(client ClientBase, keyPrefix string, funcReadData func(...string) (string, error), expireTime time.Duration, cache2Enabled bool) *Cache {
 	if client == nil {
 		logrus.Panic("cache client can not be nil")
 	}
