@@ -75,7 +75,8 @@ func (c *Cache) Get(fields ...string) (string, error) {
 		}
 		c.CacheClient.Set(c.GetCacheLayerKey(1, fields...), newVal, c.ExpireTime)
 		if c.Cache2Enabled {
-			c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, c.ExpireTime+DefaultCache2ExpirePadding)
+			// c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, c.ExpireTime+DefaultCache2ExpirePadding)
+			c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, -1)
 		}
 		c.UnLock(c.GetLockKey(fields))
 		return newVal, nil
