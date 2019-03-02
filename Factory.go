@@ -61,11 +61,11 @@ func (c *Cache) SetCache2Enabled(enabled bool) {
 }
 
 // Get 可选维度获取缓存数据
-func (c *Cache) Get(fields ...string) (string, error) {
+func (c *Cache) Get(fields ...string) (string, bool, error) {
 
 	cache1, err := c.CacheClient.Get(c.GetCacheLayerKey(1, fields...))
 	if err == nil {
-		return cache1, nil
+		return cache1, true, nil
 	}
 
 	if c.Lock(c.GetLockKey(fields), LockExpire) {
@@ -78,9 +78,9 @@ func (c *Cache) Get(fields ...string) (string, error) {
 			if err != nil {
 				cache2, err := c.CacheClient.Get(c.GetCacheLayerKey(2, fields...))
 				if err == nil {
-					return cache2, err
+					return cache2, false, err
 				}
-				return "", err
+				return "", false, err
 			}
 		}
 		c.CacheClient.Set(c.GetCacheLayerKey(1, fields...), newVal, c.ExpireTime)
@@ -89,17 +89,17 @@ func (c *Cache) Get(fields ...string) (string, error) {
 			c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, -1)
 		}
 		c.UnLock(c.GetLockKey(fields))
-		return newVal, nil
+		return newVal, false, nil
 	}
 
 	if c.Cache2Enabled {
 		cache2, err := c.CacheClient.Get(c.GetCacheLayerKey(2, fields...))
 		if err == nil {
-			return cache2, nil
+			return cache2, true, nil
 		}
-		return "", errors.New("data not exist")
+		return "", false, errors.New("data not exist")
 	}
-	return "", errors.New("data not exist")
+	return "", false, errors.New("data not exist")
 }
 
 // GetCacheLayerKey 按层维度格式化的键
