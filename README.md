@@ -9,8 +9,8 @@
 
 ### 使用方法
 
-1. `type FuncReadData func(...string) (result string, err error, toCache bool)` 按这个规则定义数据查询逻辑，通过 cache.Get(...string) 传入的参数都会传进去。缓存失效就会通过这个方法更新数据。里面可以定义自己逻辑，可以用mysql，可以用mogodb等等，根据具体业务可以灵活定义。
-该方法返回3个参数，第一个获得的数据结果，第二个是错误信息，第三个是是否需要缓存(即是获取数据成功了也可以不缓存)
+1. `type FuncReadData func(...string) (result string, toCache bool,err error)` 按这个规则定义数据查询逻辑，通过 cache.Get(...string) 传入的参数都会传进去。缓存失效就会通过这个方法更新数据。里面可以定义自己逻辑，可以用mysql，可以用mogodb等等，根据具体业务可以灵活定义。
+该方法返回3个参数，第一个获得的数据结果，第二个是是否需要缓存(即是获取数据成功了也可以不缓存)，第三个是错误信息。
 
 2. 创建 Cache
 
@@ -45,11 +45,11 @@ import (
 func main() {
 
   // 实现从数据源读取数据 支持多字段
-  channelReadData := func(fs ...string) (string, error, bool) {
+  channelReadData := func(fs ...string) (string, bool, error) {
     channelId, _ := strconv.Atoi(fs[0])
     // 从数据库读取channel并格式化成字符串
     data := db.get(channelId)
-    return data, nil ,true
+    return data, true, nil
   }
 
   channelCache := &cache.Cache{

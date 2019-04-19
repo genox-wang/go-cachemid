@@ -32,10 +32,10 @@ func BenchmarkMid500KB(b *testing.B) {
 func benchmarkCacheGet(b *testing.B, size int64, useRedis bool) {
 	//做一些初始化的工作,例如读取文件数据,数据库连接之类的,
 	//这样这些时间不影响我们测试函数本身的性能
-	funcReadData := func(fs ...string) (string, error, bool) {
+	funcReadData := func(fs ...string) (string, bool, error) {
 		// time.Sleep(time.Second * 1)
 		dst := make([]byte, size)
-		return string(dst), nil, true
+		return string(dst), true, nil
 	}
 
 	expireTime := time.Second * 1

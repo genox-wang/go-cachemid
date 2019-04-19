@@ -64,10 +64,10 @@ func TestLock(t *testing.T) {
 func TestCache(t *testing.T) {
 	var crossCounter int32
 
-	funcReadData := func(fs ...string) (string, error, bool) {
+	funcReadData := func(fs ...string) (string, bool, error) {
 		time.Sleep(time.Second * 1)
 		atomic.AddInt32(&crossCounter, 1)
-		return fs[0], nil, true
+		return fs[0], true, nil
 	}
 
 	expireTime := time.Second * 2
@@ -124,9 +124,9 @@ func TestCache(t *testing.T) {
 func TestCacheNoExistData(t *testing.T) {
 	var crossCounter int32
 
-	funcReadData := func(fs ...string) (string, error, bool) {
+	funcReadData := func(fs ...string) (string, bool, error) {
 		atomic.AddInt32(&crossCounter, 1)
-		return "", nil, true
+		return "", true, nil
 	}
 
 	expireTime := time.Second * 4

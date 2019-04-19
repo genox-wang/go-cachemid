@@ -23,7 +23,7 @@ const (
 // result 获取的数据
 // err 获取数据报错
 // 是否要缓存数据
-type FuncReadData func(...string) (result string, err error, toCache bool)
+type FuncReadData func(...string) (result string, toCache bool, err error)
 
 // Cache 自定义缓存类，支持2级缓存
 // 定时释放冷数据
@@ -81,7 +81,7 @@ func (c *Cache) Get(fields ...string) (string, bool, error) {
 			toCache bool
 		)
 		if c.FuncReadData != nil {
-			newVal, err, toCache = c.FuncReadData(fields...)
+			newVal, toCache, err = c.FuncReadData(fields...)
 			if err != nil {
 				cache2, err := c.CacheClient.Get(c.GetCacheLayerKey(2, fields...))
 				if err == nil {
