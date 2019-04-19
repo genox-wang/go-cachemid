@@ -16,9 +16,7 @@
 
 ```
 myCache := &Cache{
-  CacheClient:      &ClientGoCache{
-		client: cache.New(DefaultCacheExpire, time.Minute*10),
-	},
+  CacheClient:      NewGoCache(),
   KeyPrefix:        keyPrefix,
   FuncReadData:     funcReadData,
   ExpireTime:       expireTime,
@@ -40,7 +38,9 @@ myCache := &Cache{
 3. 上面这些都做好之后，你要做的就只是使用 `cache.Get(...string)` 获取你要的数据就可以了
 
 ```
-import "subscription_api_console_backend/utils/cache"
+import (
+  cache "github.com/wilfordw/go-cachemid"
+)
 
 func main() {
 
@@ -52,15 +52,13 @@ func main() {
     return data, nil ,true
   }
 
-  channelCache := &Cache{
-		CacheClient:       &ClientGoCache{
-      client: cache.New(DefaultCacheExpire, time.Minute*10),
-    },
+  channelCache := &cache.Cache{
+		CacheClient:       &cache.NewGoCache(),
 		KeyPrefix:        "cChannel" // 换成键名前缀
 		FuncReadData:     funcReadData,
 		ExpireTime:       time.Minute * 5,
 		Cache2Enabled:    true,
-		Cache2ExpireTime: DefaultCache2ExpirePadding,
+		Cache2ExpireTime: cache.DefaultCache2ExpirePadding,
 	}
 
   channelCache.Get(1) // 读取 id = 1 的 channel

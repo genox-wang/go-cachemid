@@ -13,6 +13,13 @@ type ClientGoCache struct {
 	client *cache.Cache
 }
 
+// NewGoCache 获取 GoCache 实例
+func NewGoCache() *ClientGoCache {
+	return &ClientGoCache{
+		client: cache.New(DefaultCacheExpire, time.Minute*10),
+	}
+}
+
 // Set GoCache 设置缓存数据
 func (c *ClientGoCache) Set(key string, val string, expireTime time.Duration) error {
 	c.client.Set(key, val, expireTime)
