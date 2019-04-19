@@ -1,12 +1,10 @@
 package gocachemid
 
 import (
-	"crypto/sha256"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -17,19 +15,27 @@ const (
 	// DefaultCacheExpire 默认缓存过期时间
 	DefaultCacheExpire = time.Second * 10
 	// DefaultCache2ExpirePadding 默认二级缓存间隔
-	DefaultCache2ExpirePadding = time.Second * 10
+	DefaultCache2ExpirePadding = -1
 )
+
+// FuncReadData 自定义获取数据的方法
+// 当不缓存不存在会把，会到把参数传到这个方法去获取数据
+// result 获取的数据
+// err 获取数据报错
+// 是否要缓存数据
+type FuncReadData func(...string) (result string, err error, toCache bool)
 
 // Cache 自定义缓存类，支持2级缓存
 // 定时释放冷数据
 // 防雪崩
 // 数据源数据更新操作完成，调用Del释放缓存，来优化缓存数据一致性
 type Cache struct {
-	CacheClient   ClientBase
-	KeyPrefix     string
-	ExpireTime    time.Duration
-	Cache2Enabled bool
-	FuncReadData  func(...string) (string, error)
+	CacheClient      ClientBase
+	KeyPrefix        string
+	ExpireTime       time.Duration // 过期时间
+	Cache2Enabled    bool          // 是否开启二级缓存
+	Cache2ExpireTime time.Duration // 二级缓存过期时间
+	FuncReadData     FuncReadData
 }
 
 // Lock 尝试获取指定键名的分布式锁
@@ -70,11 +76,12 @@ func (c *Cache) Get(fields ...string) (string, bool, error) {
 
 	if c.Lock(c.GetLockKey(fields), LockExpire) {
 		var (
-			newVal string
-			err    error
+			newVal  string
+			err     error
+			toCache bool
 		)
 		if c.FuncReadData != nil {
-			newVal, err = c.FuncReadData(fields...)
+			newVal, err, toCache = c.FuncReadData(fields...)
 			if err != nil {
 				cache2, err := c.CacheClient.Get(c.GetCacheLayerKey(2, fields...))
 				if err == nil {
@@ -83,10 +90,11 @@ func (c *Cache) Get(fields ...string) (string, bool, error) {
 				return "", false, err
 			}
 		}
-		c.CacheClient.Set(c.GetCacheLayerKey(1, fields...), newVal, c.ExpireTime)
-		if c.Cache2Enabled {
-			// c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, c.ExpireTime+DefaultCache2ExpirePadding)
-			c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, -1)
+		if toCache { // 需要缓存
+			c.CacheClient.Set(c.GetCacheLayerKey(1, fields...), newVal, c.ExpireTime)
+			if c.Cache2Enabled {
+				c.CacheClient.Set(c.GetCacheLayerKey(2, fields...), newVal, -1)
+			}
 		}
 		c.UnLock(c.GetLockKey(fields))
 		return newVal, false, nil
@@ -110,11 +118,10 @@ func (c *Cache) GetCacheLayerKey(layer int, fs ...string) string {
 	for _, f := range fs {
 		suffix += "_" + f
 	}
-	suffix += fmt.Sprintf("_%d", layer)
 
-	suffix = SHA256(suffix)
+	suffix = _md5(suffix)
 
-	return key + suffix
+	return fmt.Sprintf("%s:%s:%d", key, suffix, layer)
 }
 
 // GetLockKey 按维度格式化锁的键
@@ -125,47 +132,19 @@ func (c *Cache) GetLockKey(fs []string) string {
 	for _, f := range fs {
 		suffix += "_" + f
 	}
-	suffix += LockSuffix
 
-	suffix = SHA256(suffix)
+	suffix = _md5(suffix)
 
-	return key + suffix
+	return fmt.Sprintf("%s:%s:%d", key, suffix, LockExpire)
 }
 
-// NewCache 创建缓存实例
-// keyPrefix 键前缀
-// funcReadData 按多维度读取数据的回调
-// expireTime 缓存过期时间 0 表示默认过期时间
-// cache2Enabled 是否开启2级缓存
-func NewCache(client ClientBase, keyPrefix string, funcReadData func(...string) (string, error), expireTime time.Duration, cache2Enabled bool) *Cache {
-	if client == nil {
-		logrus.Panic("cache client can not be nil")
-	}
+// // SHA256  SHA256加密
+// func SHA256(s string) string {
+// 	h := sha256.New()
+// 	h.Write([]byte(s))
+// 	return fmt.Sprintf("%x", h.Sum(nil))
+// }
 
-	if funcReadData == nil {
-		logrus.Warn("funcReadData is nil")
-	}
-
-	if expireTime == 0 {
-		expireTime = DefaultCacheExpire
-	}
-
-	c := &Cache{
-		KeyPrefix:     keyPrefix,
-		FuncReadData:  funcReadData,
-		ExpireTime:    expireTime,
-		Cache2Enabled: cache2Enabled,
-	}
-
-	c.CacheClient = client
-	c.CacheClient.Connect()
-
-	return c
-}
-
-// SHA256  SHA256加密
-func SHA256(s string) string {
-	h := sha256.New()
-	h.Write([]byte(s))
-	return fmt.Sprintf("%x", h.Sum(nil))
+func _md5(s string) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(s)))
 }

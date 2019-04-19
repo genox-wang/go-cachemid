@@ -9,17 +9,33 @@
 
 ### 使用方法
 
-1. `func(...string) string` 按这个规则定义数据查询逻辑，通过 cache.Get(...string) 传入的参数都会传进去。缓存失效就会通过这个方法更新数据。里面可以定义自己逻辑，可以用mysql，可以用mogodb等等，根据具体业务可以灵活定义
+1. `type FuncReadData func(...string) (result string, err error, toCache bool)` 按这个规则定义数据查询逻辑，通过 cache.Get(...string) 传入的参数都会传进去。缓存失效就会通过这个方法更新数据。里面可以定义自己逻辑，可以用mysql，可以用mogodb等等，根据具体业务可以灵活定义。
+该方法返回3个参数，第一个获得的数据结果，第二个是错误信息，第三个是是否需要缓存(即是获取数据成功了也可以不缓存)
 
-2. `cache.NewCache(&cache.ClientGoCache{}, keyPrefix, funcReadData, expireTime, use2Cache)`，
-  - 创建cache实例。注册你要使用的缓存服务。目前实现了本地(GoCache)和Redis，扩展很方便。
-  - keyPrefix 定义键名前缀防止键值冲突
-    - 1级缓存键名 `{keyPrefix}_{f1}_{f2}.._1`
-    - 2级缓存键名 `{keyPrefix}_{f1}_{f2}.._2`
-    - 全局锁键名 `{keyPrefix}_{f1}_{f2}.._lock`
-  - funcReadData 自定义数据查询逻辑
-  - expireTime 1级缓存过期时间，2级缓存过期时间 = 1级缓存过期时间 + 5分钟
-  - use2Cache 是否使用2级缓存
+2. 创建 Cache
+
+```
+myCache := &Cache{
+  CacheClient:      &ClientGoCache{
+		client: cache.New(DefaultCacheExpire, time.Minute*10),
+	},
+  KeyPrefix:        keyPrefix,
+  FuncReadData:     funcReadData,
+  ExpireTime:       expireTime,
+  Cache2Enabled:    true,
+  Cache2ExpireTime: DefaultCache2ExpirePadding,
+}
+```
+
+  - 创建 CacheClient 实例。注册你要使用的缓存服务。目前实现了本地GoCache，要扩展主要实现 ClientBase, 扩展很方便。
+  - KeyPrefix 定义键名前缀防止键值冲突
+    - 1级缓存键名 `{keyPrefix}:md5({f1}:{f2}..):1`
+    - 2级缓存键名 `{keyPrefix}:md5({f1}:{f2}..):2`
+    - 全局锁键名 `{keyPrefix}md5({f1}:{f2}..):lock`
+  - FuncReadData 自定义数据查询逻辑
+  - ExpireTime 1级缓存过期时间，2级缓存过期时间 = 1级缓存过期时间 + 5分钟
+  - Cache2Enabled 是否使用2级缓存
+  - Cache2ExpireTime 二级缓存过期时间，如果要永不过期，传-1
 
 3. 上面这些都做好之后，你要做的就只是使用 `cache.Get(...string)` 获取你要的数据就可以了
 
@@ -29,20 +45,23 @@ import "subscription_api_console_backend/utils/cache"
 func main() {
 
   // 实现从数据源读取数据 支持多字段
-  channelReadData := func(fs ...string) string {
+  channelReadData := func(fs ...string) (string, error, bool) {
     channelId, _ := strconv.Atoi(fs[0])
     // 从数据库读取channel并格式化成字符串
     data := db.get(channelId)
-    return data
+    return data, nil ,true
   }
-  
-  cacheClient := &cache.ClientGoCache{} // 使用本地缓存
-  //cacheClient := &cache.ClientRedis{} // 使用 Redis 缓存
-  expireTime := time.Minute * 5 // 缓存过期时间
-  keyPrefix := "cChannel" // 换成键名前缀
-  use2Cache := true // 是否使用2级缓存
 
-  channelCache := cache.NewCache(cacheClient, keyPrefix, funcReadData, expireTime, use2Cache)
+  channelCache := &Cache{
+		CacheClient:       &ClientGoCache{
+      client: cache.New(DefaultCacheExpire, time.Minute*10),
+    },
+		KeyPrefix:        "cChannel" // 换成键名前缀
+		FuncReadData:     funcReadData,
+		ExpireTime:       time.Minute * 5,
+		Cache2Enabled:    true,
+		Cache2ExpireTime: DefaultCache2ExpirePadding,
+	}
 
   channelCache.Get(1) // 读取 id = 1 的 channel
 }

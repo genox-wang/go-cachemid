@@ -1,10 +1,11 @@
 package gocachemid
 
 import (
-	"gosync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,29 +23,38 @@ type CacheTestAsserts struct {
 
 func SelectedCache() ClientBase {
 	// return &ClientRedis{}
-	return &ClientGoCache{}
+	return &ClientGoCache{
+		client: cache.New(DefaultCacheExpire, time.Minute*10),
+	}
 }
 
 func TestLock(t *testing.T) {
-	c := NewCache(SelectedCache(), "", nil, 0, true)
+	c := &Cache{
+		CacheClient:      SelectedCache(),
+		KeyPrefix:        "lock:test",
+		ExpireTime:       time.Second * 10, // 过期时间
+		Cache2Enabled:    true,
+		Cache2ExpireTime: time.Second * 10,
+		FuncReadData:     nil,
+	}
 
-	success := gosync.NewCounter(0)
-	fail := gosync.NewCounter(0)
+	var success int32
+	var fail int32
 
-	testKey := "key"
+	testKey := "test"
 
 	runnerNum := 5000
 
-	runASync(func(runnedCounter *gosync.Counter) {
+	runASync(func(runTimes *int32) {
 		if c.Lock(testKey, time.Second*10) {
-			success.Incr(1)
+			atomic.AddInt32(&success, 1)
 		} else {
-			fail.Incr(1)
+			atomic.AddInt32(&fail, 1)
 		}
-		runnedCounter.Incr(1)
+		atomic.AddInt32(runTimes, 1)
 	}, runnerNum)
 
-	assert.Equal(t, success.Val(), int64(1), "同一键名只能被锁一次")
+	assert.Equal(t, success, int32(1), "同一键名只能被锁一次")
 
 	c.UnLock(testKey)
 
@@ -52,33 +62,40 @@ func TestLock(t *testing.T) {
 }
 
 func TestCache(t *testing.T) {
-	crossCounter := gosync.NewCounter(0)
+	var crossCounter int32
 
-	funcReadData := func(fs ...string) string {
+	funcReadData := func(fs ...string) (string, error, bool) {
 		time.Sleep(time.Second * 1)
-		crossCounter.Incr(1)
-		return fs[0]
+		atomic.AddInt32(&crossCounter, 1)
+		return fs[0], nil, true
 	}
 
 	expireTime := time.Second * 2
 	keyPrefix := "cacheTest_"
 
-	testCache := NewCache(SelectedCache(), keyPrefix, funcReadData, expireTime, true)
+	testCache := &Cache{
+		CacheClient:      SelectedCache(),
+		KeyPrefix:        keyPrefix,
+		FuncReadData:     funcReadData,
+		ExpireTime:       expireTime,
+		Cache2Enabled:    true,
+		Cache2ExpireTime: DefaultCache2ExpirePadding,
+	}
 
 	runnerNum := 50
 
 	// 还没有生成缓存
 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
-		CrossCnt:   AssertModel{Expected: 1, Message: "并发只允许一次穿透"},
-		SuccessCnt: AssertModel{Expected: 1, Message: "二级缓存生成前其他请求都应该失败"},
-		EmptyCnt:   AssertModel{Expected: runnerNum - 1, Message: "二级缓存生成前其他请求都应该返回空"},
+		CrossCnt:   AssertModel{Expected: int32(1), Message: "并发只允许一次穿透"},
+		SuccessCnt: AssertModel{Expected: int32(1), Message: "二级缓存生成前其他请求都应该失败"},
+		EmptyCnt:   AssertModel{Expected: int32(runnerNum - 1), Message: "二级缓存生成前其他请求都应该返回空"},
 	}, "1")
 
 	// 生成缓存且没过期
 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
-		CrossCnt:   AssertModel{Expected: 0, Message: "缓存在不应该穿透缓存"},
-		SuccessCnt: AssertModel{Expected: runnerNum, Message: "缓存存在应该全部打在缓存上"},
-		EmptyCnt:   AssertModel{Expected: 0, Message: "缓存存在应该不存在空返回"},
+		CrossCnt:   AssertModel{Expected: int32(0), Message: "缓存在不应该穿透缓存"},
+		SuccessCnt: AssertModel{Expected: int32(runnerNum), Message: "缓存存在应该全部打在缓存上"},
+		EmptyCnt:   AssertModel{Expected: int32(0), Message: "缓存存在应该不存在空返回"},
 	}, "1")
 
 	// 等待 缓存过期
@@ -86,9 +103,9 @@ func TestCache(t *testing.T) {
 
 	// 缓存过期 二级缓存没过期，且使用二级缓存
 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
-		CrossCnt:   AssertModel{Expected: 1, Message: "只允许一次缓存穿透"},
-		SuccessCnt: AssertModel{Expected: runnerNum, Message: "开启二级缓存应该是0失败"},
-		EmptyCnt:   AssertModel{Expected: 0, Message: "开启二级缓存应该是0空返回"},
+		CrossCnt:   AssertModel{Expected: int32(1), Message: "只允许一次缓存穿透"},
+		SuccessCnt: AssertModel{Expected: int32(runnerNum), Message: "开启二级缓存应该是0失败"},
+		EmptyCnt:   AssertModel{Expected: int32(0), Message: "开启二级缓存应该是0空返回"},
 	}, "1")
 
 	// 关闭 2级缓存
@@ -98,73 +115,107 @@ func TestCache(t *testing.T) {
 
 	// 缓存过期 二级缓存没过期，且不使用二级缓存
 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
-		CrossCnt:   AssertModel{Expected: 1, Message: "只允许一次缓存穿透"},
-		SuccessCnt: AssertModel{Expected: 1, Message: "不开启二级缓存只有穿透的能成功"},
-		EmptyCnt:   AssertModel{Expected: runnerNum - 1, Message: "不开启二级缓存应该剩余的全返回空"},
+		CrossCnt:   AssertModel{Expected: int32(1), Message: "只允许一次缓存穿透"},
+		SuccessCnt: AssertModel{Expected: int32(1), Message: "不开启二级缓存只有穿透的能成功"},
+		EmptyCnt:   AssertModel{Expected: int32(runnerNum - 1), Message: "不开启二级缓存应该剩余的全返回空"},
 	}, "1")
 }
 
 func TestCacheNoExistData(t *testing.T) {
-	crossCounter := gosync.NewCounter(0)
+	var crossCounter int32
 
-	funcReadData := func(fs ...string) string {
-		crossCounter.Incr(1)
-		// 模拟读取不到数据
-		return ""
+	funcReadData := func(fs ...string) (string, error, bool) {
+		atomic.AddInt32(&crossCounter, 1)
+		return "", nil, true
 	}
 
 	expireTime := time.Second * 4
 	keyPrefix := "cacheNoExistTest_"
 
-	testCache := NewCache(SelectedCache(), keyPrefix, funcReadData, expireTime, true)
+	testCache := &Cache{
+		CacheClient:      SelectedCache(),
+		KeyPrefix:        keyPrefix,
+		FuncReadData:     funcReadData,
+		ExpireTime:       expireTime,
+		Cache2Enabled:    true,
+		Cache2ExpireTime: DefaultCache2ExpirePadding,
+	}
 
 	runnerNum := 50
 
 	testCache.Get("1")
 
 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
-		CrossCnt:   AssertModel{Expected: 0, Message: "缓存存在不应该有穿透"},
-		SuccessCnt: AssertModel{Expected: runnerNum, Message: "走缓存应该都成功"},
-		EmptyCnt:   AssertModel{Expected: runnerNum, Message: "空数据全返回空"},
+		CrossCnt:   AssertModel{Expected: int32(0), Message: "缓存存在不应该有穿透"},
+		SuccessCnt: AssertModel{Expected: int32(runnerNum), Message: "走缓存应该都成功"},
+		EmptyCnt:   AssertModel{Expected: int32(runnerNum), Message: "空数据全返回空"},
 	}, "1")
 }
 
-func doTestCache(t *testing.T, c *Cache, runnerNum int, crossCounter *gosync.Counter, asserts CacheTestAsserts, fields ...string) {
-	crossCounter.ToZero()
+// func TestCacheNoNeedToCache(t *testing.T) {
+// 	var crossCounter int32
+
+// 	funcReadData := func(fs ...string) (string, error, bool) {
+// 		atomic.AddInt32(&crossCounter, 1)
+// 		return "", nil, false
+// 	}
+
+// 	expireTime := time.Second * 4
+// 	keyPrefix := "cacheNoNeedToCacheTest_"
+
+// 	testCache := &Cache{
+// 		CacheClient:      SelectedCache(),
+// 		KeyPrefix:        keyPrefix,
+// 		FuncReadData:     funcReadData,
+// 		ExpireTime:       expireTime,
+// 		Cache2Enabled:    true,
+// 		Cache2ExpireTime: DefaultCache2ExpirePadding,
+// 	}
+
+// 	runnerNum := 50
+
+// 	testCache.Get("1")
+
+// 	doTestCache(t, testCache, runnerNum, &crossCounter, CacheTestAsserts{
+// 		CrossCnt:   AssertModel{Expected: int32(runnerNum), Message: "应该不走缓存"},
+// 		SuccessCnt: AssertModel{Expected: int32(runnerNum), Message: "走缓存应该都成功"},
+// 		EmptyCnt:   AssertModel{Expected: int32(runnerNum), Message: "空数据全返回空"},
+// 	}, "1")
+// }
+
+func doTestCache(t *testing.T, c *Cache, runnerNum int, crossCounter *int32, asserts CacheTestAsserts, fields ...string) {
+	*crossCounter = 0
+	// crossCounter.ToZero()
 	success, empty := AsyncRequestCache(c, runnerNum, fields...)
 
-	assert.Equal(t, int64(asserts.CrossCnt.Expected.(int)), crossCounter.Val(), asserts.CrossCnt.Message)
-	assert.Equal(t, int64(asserts.SuccessCnt.Expected.(int)), success, asserts.SuccessCnt.Message)
-	assert.Equal(t, int64(asserts.EmptyCnt.Expected.(int)), empty, asserts.EmptyCnt.Message)
+	assert.Equal(t, asserts.CrossCnt.Expected.(int32), *crossCounter, asserts.CrossCnt.Message)
+	assert.Equal(t, asserts.SuccessCnt.Expected.(int32), success, asserts.SuccessCnt.Message)
+	assert.Equal(t, asserts.EmptyCnt.Expected.(int32), empty, asserts.EmptyCnt.Message)
 }
 
-func AsyncRequestCache(c *Cache, runTimes int, fields ...string) (success, empty int64) {
-	successCounter := gosync.NewCounter(0)
-	emptyCounter := gosync.NewCounter(0)
+func AsyncRequestCache(c *Cache, runTimes int, fields ...string) (success, empty int32) {
 
-	runASync(func(runnedCounter *gosync.Counter) {
-		v, err := c.Get(fields...)
+	runASync(func(runnedCounter *int32) {
+		v, _, err := c.Get(fields...)
 		if err == nil {
-			successCounter.Incr(1)
+			atomic.AddInt32(&success, 1)
 		}
 		if v == "" {
-			emptyCounter.Incr(1)
+			atomic.AddInt32(&empty, 1)
 		}
-		runnedCounter.Incr(1)
+		atomic.AddInt32(runnedCounter, 1)
 	}, runTimes)
 
-	success = successCounter.Val()
-	empty = emptyCounter.Val()
 	return success, empty
 }
 
-func runASync(action func(*gosync.Counter), times int) {
-	runnedCounter := gosync.NewCounter(0)
+func runASync(action func(*int32), times int) {
+	var runTimes int32
 	for i := 0; i < times; i++ {
-		go action(&runnedCounter)
+		go action(&runTimes)
 	}
 	for {
-		if runnedCounter.Val() == int64(times) {
+		if runTimes == int32(times) {
 			break
 		}
 	}

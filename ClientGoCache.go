@@ -51,9 +51,9 @@ func (c *ClientGoCache) DelWithPrefix(keyPrefix string) error {
 }
 
 // Connect 连接 GoCache 服务器
-func (c *ClientGoCache) Connect() error {
+// func (c *ClientGoCache) Connect() error {
 
-	c.client = cache.New(DefaultCacheExpire, time.Minute*10)
+// 	c.client = cache.New(DefaultCacheExpire, time.Minute*10)
 
-	return nil
-}
+// 	return nil
+// }

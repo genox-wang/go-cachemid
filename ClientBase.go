@@ -9,5 +9,4 @@ type ClientBase interface {
 	Get(key string) (string, error)
 	Del(key string) error
 	DelWithPrefix(keyPrefix string) error
-	Connect() error
 }
